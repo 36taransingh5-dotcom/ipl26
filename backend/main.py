@@ -41,6 +41,20 @@ def get_players(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     players = db.query(models.Player).offset(skip).limit(limit).all()
     return players
 
+from datetime import datetime
+@app.get("/api/matches/next", response_model=schemas.MatchResponse)
+def get_next_match(db: Session = Depends(get_db)):
+    # Since our DB has past matches, let's just get the first "Upcoming" match or simply order by date
+    # In a real app we'd use datetime.utcnow(), but our mock data from sportsmonks might be old.
+    # Let's get the most recent upcoming or simply the first match if none are upcoming.
+    match = db.query(models.Match).filter(models.Match.match_status == "NS").order_by(models.Match.match_date_time.asc()).first()
+    if not match:
+         match = db.query(models.Match).order_by(models.Match.match_date_time.desc()).first() # fallback to any match
+    
+    if not match:
+        raise HTTPException(status_code=404, detail="No matches found")
+    return match
+
 @app.post("/api/predictions", response_model=schemas.PredictionResponse)
 def create_prediction(prediction: schemas.PredictionCreate, db: Session = Depends(get_db)):
     # Check if a prediction already exists for this user and match

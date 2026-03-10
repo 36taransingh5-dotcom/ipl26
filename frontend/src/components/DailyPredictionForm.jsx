@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const DailyPredictionForm = () => {
+    const [match, setMatch] = useState(null);
+    const [isLoadingMatch, setIsLoadingMatch] = useState(true);
+
     const [matchWinner, setMatchWinner] = useState('');
     const [tossWinner, setTossWinner] = useState('');
     const [topScorer, setTopScorer] = useState('');
@@ -13,10 +16,108 @@ const DailyPredictionForm = () => {
     const [submitStatus, setSubmitStatus] = useState(null); // 'success', 'error', null
     const [errorMessage, setErrorMessage] = useState('');
 
-    const handleSubmit = (e) => {
+    useEffect(() => {
+        const fetchNextMatch = async () => {
+            try {
+                const res = await fetch('http://localhost:8000/api/matches/next');
+                if (res.ok) {
+                    const data = await res.json();
+                    setMatch(data);
+                } else {
+                    console.error("Failed to fetch next match");
+                    setErrorMessage("Failed to load match data. Please try again later.");
+                    setSubmitStatus('error');
+                }
+            } catch (error) {
+                console.error("Error fetching next match:", error);
+                setErrorMessage("Network error. Could not connect to the server.");
+                setSubmitStatus('error');
+            } finally {
+                setIsLoadingMatch(false);
+            }
+        };
+        fetchNextMatch();
+    }, []);
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        setSubmitted(true);
-        // In a real app, this would send data to the backend
+
+        // Basic validation
+        if (!matchWinner || !tossWinner || !topScorer || !topWicketTaker) {
+            setSubmitStatus('error');
+            setErrorMessage('Please fill out all prediction fields.');
+            return;
+        }
+
+        if (!match) {
+            setSubmitStatus('error');
+            setErrorMessage('No valid match found to submit predictions for.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setSubmitStatus(null);
+        setErrorMessage('');
+
+        try {
+            const response = await fetch('http://localhost:8000/api/predictions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: 1, // Hardcoded for now until auth is added
+                    match_id: match.id,
+                    predicted_winner: matchWinner,
+                    toss_winner: tossWinner,
+                    top_scorer: topScorer,
+                    top_wicket_taker: topWicketTaker,
+                    total_boundaries: parseInt(boundaries, 10)
+                }),
+            });
+
+            if (response.ok) {
+                setSubmitStatus('success');
+                setSubmitted(true); // Mark as submitted on success
+            } else {
+                const errorData = await response.json();
+                setSubmitStatus('error');
+                setErrorMessage(errorData.message || 'Failed to submit prediction.');
+            }
+        } catch (error) {
+            console.error("Error submitting prediction:", error);
+            setSubmitStatus('error');
+            setErrorMessage('Network error. Could not submit prediction.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    if (isLoadingMatch) {
+        return (
+            <div className="bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-800 text-white font-sans w-full max-w-md mx-auto my-6 p-6 text-center">
+                <p className="text-lg font-semibold text-gray-300">Loading next match...</p>
+                <svg className="animate-spin mx-auto mt-4 h-8 w-8 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+        );
+    }
+
+    if (!match && !isLoadingMatch) {
+        return (
+            <div className="bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-800 text-white font-sans w-full max-w-md mx-auto my-6 p-6 text-center">
+                <p className="text-lg font-semibold text-red-400">No upcoming matches found or an error occurred.</p>
+                {errorMessage && <p className="text-sm text-red-300 mt-2">{errorMessage}</p>}
+            </div>
+        );
+    }
+
+    const formatDateTime = (dateString) => {
+        if (!dateString) return '';
+        const options = { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return new Date(dateString).toLocaleDateString('en-US', options);
     };
 
     return (
@@ -27,24 +128,24 @@ const DailyPredictionForm = () => {
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-green-500/10 via-transparent to-transparent opacity-50"></div>
                 <div className="relative z-10 flex justify-between items-center text-center">
 
-                    {/* Team A - Example RCB */}
+                    {/* Team A */}
                     <div className="flex flex-col items-center">
                         <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-red-600 to-red-400 flex items-center justify-center p-1 shadow-[0_0_15px_rgba(220,38,38,0.5)]">
-                            <span className="font-extrabold text-xl text-white tracking-wider">RCB</span>
+                            <span className="font-extrabold text-xl text-white tracking-wider">{match.team_a}</span>
                         </div>
                     </div>
 
                     {/* VS & Match Info */}
                     <div className="flex flex-col items-center justify-center px-4">
-                        <span className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-1">Match 24</span>
+                        <span className="text-xs font-bold text-gray-400 tracking-widest uppercase mb-1">Match {match.id}</span>
                         <span className="text-2xl font-black italic text-gray-50 bg-clip-text text-transparent bg-gradient-to-r from-gray-100 to-gray-500">VS</span>
-                        <span className="text-[10px] font-medium text-cyan-400 mt-2 tracking-wide uppercase">Thu 16 Apr | 7:30 PM PM</span>
+                        <span className="text-[10px] font-medium text-cyan-400 mt-2 tracking-wide uppercase">{formatDateTime(match.match_date_time)}</span>
                     </div>
 
-                    {/* Team B - Example CSK */}
+                    {/* Team B */}
                     <div className="flex flex-col items-center">
                         <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-yellow-500 to-yellow-300 flex items-center justify-center p-1 shadow-[0_0_15px_rgba(234,179,8,0.5)]">
-                            <span className="font-extrabold text-xl text-gray-900 tracking-wider">CSK</span>
+                            <span className="font-extrabold text-xl text-gray-900 tracking-wider">{match.team_b}</span>
                         </div>
                     </div>
                 </div>
@@ -57,19 +158,19 @@ const DailyPredictionForm = () => {
                 <div className="space-y-3">
                     <label className="block text-sm font-semibold text-gray-300 uppercase tracking-wide">Match Winner</label>
                     <div className="grid grid-cols-2 gap-4">
-                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${matchWinner === 'RCB' ? 'bg-gray-800 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
-                            <input type="radio" name="matchWinner" value="RCB" className="hidden" onChange={(e) => setMatchWinner(e.target.value)} />
-                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${matchWinner === 'RCB' ? 'border-green-500' : 'border-gray-500'}`}>
-                                {matchWinner === 'RCB' && <div className="w-2 h-2 rounded-full bg-green-500"></div>}
+                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${matchWinner === match.team_a ? 'bg-gray-800 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
+                            <input type="radio" name="matchWinner" value={match.team_a} className="hidden" onChange={(e) => setMatchWinner(e.target.value)} />
+                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${matchWinner === match.team_a ? 'border-green-500' : 'border-gray-500'}`}>
+                                {matchWinner === match.team_a && <div className="w-2 h-2 rounded-full bg-green-500"></div>}
                             </div>
-                            <span className={`font-bold ${matchWinner === 'RCB' ? 'text-green-400' : 'text-gray-400'}`}>RCB</span>
+                            <span className={`font-bold ${matchWinner === match.team_a ? 'text-green-400' : 'text-gray-400'}`}>{match.team_a}</span>
                         </label>
-                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${matchWinner === 'CSK' ? 'bg-gray-800 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
-                            <input type="radio" name="matchWinner" value="CSK" className="hidden" onChange={(e) => setMatchWinner(e.target.value)} />
-                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${matchWinner === 'CSK' ? 'border-green-500' : 'border-gray-500'}`}>
-                                {matchWinner === 'CSK' && <div className="w-2 h-2 rounded-full bg-green-500"></div>}
+                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${matchWinner === match.team_b ? 'bg-gray-800 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
+                            <input type="radio" name="matchWinner" value={match.team_b} className="hidden" onChange={(e) => setMatchWinner(e.target.value)} />
+                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${matchWinner === match.team_b ? 'border-green-500' : 'border-gray-500'}`}>
+                                {matchWinner === match.team_b && <div className="w-2 h-2 rounded-full bg-green-500"></div>}
                             </div>
-                            <span className={`font-bold ${matchWinner === 'CSK' ? 'text-green-400' : 'text-gray-400'}`}>CSK</span>
+                            <span className={`font-bold ${matchWinner === match.team_b ? 'text-green-400' : 'text-gray-400'}`}>{match.team_b}</span>
                         </label>
                     </div>
                 </div>
@@ -78,19 +179,19 @@ const DailyPredictionForm = () => {
                 <div className="space-y-3">
                     <label className="block text-sm font-semibold text-gray-300 uppercase tracking-wide">Toss Winner</label>
                     <div className="grid grid-cols-2 gap-4">
-                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${tossWinner === 'RCB' ? 'bg-gray-800 border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
-                            <input type="radio" name="tossWinner" value="RCB" className="hidden" onChange={(e) => setTossWinner(e.target.value)} />
-                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${tossWinner === 'RCB' ? 'border-cyan-500' : 'border-gray-500'}`}>
-                                {tossWinner === 'RCB' && <div className="w-2 h-2 rounded-full bg-cyan-500"></div>}
+                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${tossWinner === match.team_a ? 'bg-gray-800 border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
+                            <input type="radio" name="tossWinner" value={match.team_a} className="hidden" onChange={(e) => setTossWinner(e.target.value)} />
+                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${tossWinner === match.team_a ? 'border-cyan-500' : 'border-gray-500'}`}>
+                                {tossWinner === match.team_a && <div className="w-2 h-2 rounded-full bg-cyan-500"></div>}
                             </div>
-                            <span className={`font-bold ${tossWinner === 'RCB' ? 'text-cyan-400' : 'text-gray-400'}`}>RCB</span>
+                            <span className={`font-bold ${tossWinner === match.team_a ? 'text-cyan-400' : 'text-gray-400'}`}>{match.team_a}</span>
                         </label>
-                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${tossWinner === 'CSK' ? 'bg-gray-800 border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
-                            <input type="radio" name="tossWinner" value="CSK" className="hidden" onChange={(e) => setTossWinner(e.target.value)} />
-                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${tossWinner === 'CSK' ? 'border-cyan-500' : 'border-gray-500'}`}>
-                                {tossWinner === 'CSK' && <div className="w-2 h-2 rounded-full bg-cyan-500"></div>}
+                        <label className={`relative flex items-center justify-center p-3 rounded-xl cursor-pointer border transition-all duration-300 ${tossWinner === match.team_b ? 'bg-gray-800 border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.3)]' : 'bg-gray-900 border-gray-700 hover:border-gray-500'}`}>
+                            <input type="radio" name="tossWinner" value={match.team_b} className="hidden" onChange={(e) => setTossWinner(e.target.value)} />
+                            <div className={`w-4 h-4 rounded-full border-2 mr-3 flex items-center justify-center ${tossWinner === match.team_b ? 'border-cyan-500' : 'border-gray-500'}`}>
+                                {tossWinner === match.team_b && <div className="w-2 h-2 rounded-full bg-cyan-500"></div>}
                             </div>
-                            <span className={`font-bold ${tossWinner === 'CSK' ? 'text-cyan-400' : 'text-gray-400'}`}>CSK</span>
+                            <span className={`font-bold ${tossWinner === match.team_b ? 'text-cyan-400' : 'text-gray-400'}`}>{match.team_b}</span>
                         </label>
                     </div>
                 </div>

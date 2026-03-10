@@ -21,6 +21,17 @@ class PredictionResponse(PredictionBase):
     class Config:
         from_attributes = True
 
+from datetime import datetime
+class MatchResponse(BaseModel):
+    id: int
+    team_a: str
+    team_b: str
+    match_date_time: datetime | None = None
+    match_status: str | None = None
+
+    class Config:
+        from_attributes = True
+
 class PlayerResponse(BaseModel):
     id: int
     fullname: str
